@@ -251,7 +251,13 @@ pub fn update(rev: Option<&str>) -> anyhow::Result<()> {
     std::fs::rename(&staging, &dest)?;
     let link = sdk.join(".current");
     let _ = std::fs::remove_file(&link);
+    // Portable fallback: symlinks need privileges Windows does not grant by
+    // default, so write a plain pointer file (commit sha + date) instead.
+    // `current()` reads either form.
+    #[cfg(unix)]
     std::os::unix::fs::symlink(&commit.sha, &link)?;
+    #[cfg(not(unix))]
+    std::fs::write(&link, format!("{}\n{}\n", commit.sha, commit.date))?;
     std::fs::rename(&link, current())?;
     for entry in std::fs::read_dir(&sdk)?.flatten() {
         let name = entry.file_name();

@@ -186,7 +186,15 @@ fn compile_rust(
     }
     let mut ld_cmd = Command::new(tool("LD", "ld.lld"));
     ld_cmd
-        .args(["-r", "-T"])
+        // `--gc-sections` is required here, not an optimisation. Every Rust
+        // function lands in its own section (`.text._RNvCs…`); without
+        // section GC the linker keeps the whole archive, including every
+        // target branch of `canopus-target-private`. Measured on a private-ABI
+        // module: .text 3 KB -> 164 KB, resident 209 KB, and .rodata filled
+        // with unused firmware addresses, which made `canopus verify` fail its
+        // absolute-address allowlist check. With GC: ELF 388 KB -> 23 KB,
+        // resident -> 10.8 KB, verify passes.
+        .args(["-r", "--gc-sections", "-T"])
         .arg(root.join("sdk/rust/c_shim/module.ld"))
         .arg(&shim_o)
         .arg(archive);

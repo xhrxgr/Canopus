@@ -194,6 +194,12 @@ fn compile_rust(
         // with unused firmware addresses, which made `canopus verify` fail its
         // absolute-address allowlist check. With GC: ELF 388 KB -> 23 KB,
         // resident -> 10.8 KB, verify passes.
+        // 只保留 `--gc-sections`。
+        //
+        // ★ 曾试过在这里加 `--discard-locals` 以缩小 `.strtab`：实测对
+        //   BandLink 的体积**零效果**（71,608 → 71,608），却会改变**所有**
+        //   模块的链接行为。为了一个没有收益的改动去动上游模块的产物，
+        //   不划算 —— 兼容性优先，已移除。
         .args(["-r", "--gc-sections", "-T"])
         .arg(root.join("sdk/rust/c_shim/module.ld"))
         .arg(&shim_o)

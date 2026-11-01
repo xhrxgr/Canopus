@@ -41,6 +41,11 @@ capabilities = [
   "classic.adapter",
   "classic.l2cap",
   "classic.sdp",
+  # Proven by the BandLink field runs on 3.101.043: discovery start/stop with
+  # scan-mode read-back, and a resident pair-request filter that answers SSP
+  # from the core adapter (EVID-BT-1043-GAP-001, EVID-BT-1043-PAIR-FILTER-003).
+  "classic.discovery",
+  "classic.pair-request-filter",
   "bt.timer",
   "native-app.register",
   "launcher.entry",

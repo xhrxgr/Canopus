@@ -271,6 +271,45 @@ unsafe fn core_bt_adapter() -> *mut core::ffi::c_void {
     }
 }
 
+/// Public view of [`core_bt_adapter`].
+///
+/// SSP replies (`bt_pair_request_reply` / `bt_pair_display_reply`) MUST be
+/// sent to this instance. Replying through the instance returned by
+/// `bt_adapter_get_instance()` returns 0 but never reaches the controller, and
+/// pairing then sits in BOND_STATE_BONDING(1) forever.
+pub unsafe fn bt_core_adapter() -> *mut core::ffi::c_void {
+    unsafe { core_bt_adapter() }
+}
+
+/// Undo [`bt_install_pair_request_filter`]: put the stock registration back.
+///
+/// Order matters: register the stock table first, then unregister the mirror,
+/// and only then repoint the handle. The adapter therefore always holds one
+/// usable pair-request callback, with no window where it holds none.
+/// Returns `true` when the stock state (and the mirror allocation) is restored.
+pub unsafe fn bt_uninstall_pair_request_filter(filter: PairRequestFilter) -> bool {
+    let adapter = unsafe { core_bt_adapter() };
+    if adapter.is_null() || filter.registration == 0 {
+        return false;
+    }
+    let handle_ptr =
+        canopus_target_generated::canopus_fw_core_bt_registration_handle as *mut u32;
+    let stock = canopus_target_generated::canopus_fw_stock_bt_callback_descriptor as *const u32;
+    let handle = unsafe { bt_adapter_register(adapter, stock) };
+    if handle == 0 {
+        return false;
+    }
+    if unsafe { bt_adapter_unregister(adapter, filter.registration) } == 0 {
+        // Unregistering the mirror failed: roll the stock table back so the
+        // adapter keeps exactly the registration it had before this call.
+        unsafe { bt_adapter_unregister(adapter, handle) };
+        return false;
+    }
+    unsafe { core::ptr::write_volatile(handle_ptr, handle) };
+    unsafe { bt_free(filter.allocation as *mut core::ffi::c_void) };
+    true
+}
+
 /// Replaces the stock 3.101.043 Pair Request registration with a resident
 /// 17-word mirror. The stock handle is the callback-list node allocated by
 /// `sub_C3A96EC`; word 1 owns the descriptor pointer. Registration and removal
@@ -1323,6 +1362,22 @@ pub unsafe fn nuttx_open(path: *const u8, flags: i32) -> i32 {
         ))
     };
     f(path, flags)
+}
+
+/// `nuttx_open` with an explicit permission mask.
+///
+/// `nuttx_open(path, flags)` is variadic: with `O_CREAT` the third argument
+/// (mode) is whatever happens to sit in the register. Observed on device: the
+/// file is created but unreadable, so the launcher's `fs_open` fails with
+/// `errno 13 (EACCES)` and the icon never appears.
+pub unsafe fn nuttx_open_mode(path: *const u8, flags: i32, mode: i32) -> i32 {
+    type F = extern "C" fn(*const u8, i32, ...) -> i32;
+    let f: F = unsafe {
+        core::mem::transmute(canopus_target_generated::canopus_thumb_callable(
+            canopus_target_generated::CANOPUS_FW_OPEN_CALLABLE,
+        ))
+    };
+    f(path, flags, mode)
 }
 
 pub unsafe fn nuttx_close(fd: i32) -> i32 {

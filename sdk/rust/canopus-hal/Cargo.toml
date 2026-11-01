@@ -1,0 +1,18 @@
+[package]
+name = "canopus-hal"
+version = "0.1.0"
+edition = "2021"
+description = "Hardware abstraction layer between Canopus modules and firmware"
+
+[dependencies]
+canopus-target-private = { path = "../canopus-target-private", optional = true, default-features = false }
+
+[features]
+default = []
+# 每个"已实现语义层"的设备一个 backend feature
+backend-band10pro-043 = [
+    "dep:canopus-target-private",
+    "canopus-target-private/target-xiaomi-band-10-pro-3-101-043",
+]
+
+[workspace]
